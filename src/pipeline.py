@@ -15,7 +15,7 @@ Useful docs:
 import os
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 from src.knowledge_base import build_knowledge_base
-
+import argparse
 
 # ──────────────────────────────────────────────
 # Provided: local LLM (no API key needed)
@@ -81,30 +81,100 @@ def ask_question(vector_store, llm, question: str) -> dict:
             "sources" -> list[str]: the chunk texts that were retrieved
     """
     # TODO: implement this (~6-8 lines)
-    raise NotImplementedError("TODO 1: Implement ask_question")
+    docs = vector_store.similarity_search(question, k=3)
+
+    sources = [doc.page_content for doc in docs]
+
+    context = "\n\n".join(sources)
+
+    prompt = PROMPT_TEMPLATE.format(
+        context=context,
+        question=question
+        )
+
+    result = llm(prompt)
+    answer = result[0]["generated_text"]
+
+    return {
+    "answer": answer,
+    "sources": sources
+    }
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # TODO 2: Complete the interactive loop
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-def main():
-    """Interactive Q&A loop.
+def main() -> None:
+    
+    parser = argparse.ArgumentParser(
+        description="Marketing Agency Q&A Chatbot"
+    )
+    parser.add_argument(
+        "--query",
+        type=str,
+        help="Ask a single question and exit"
+    )
+    args = parser.parse_args()
 
-    Steps:
-      1. Build the knowledge base using build_knowledge_base()
-         with the data/ directory path.
-      2. Load the LLM using get_llm().
-      3. Start a loop that:
-         - Prompts the user for a question with input()
-         - Exits if they type "quit"
-         - Calls ask_question() with their input
-         - Prints the retrieved sources and the answer
-    """
-    data_dir = os.path.join(os.path.dirname(__file__), "..", "data")
+    data_dir = os.path.join(
+        os.path.dirname(__file__),
+        "..",
+        "data"
+    )
 
-    # TODO: implement this (~10-12 lines)
-    raise NotImplementedError("TODO 2: Complete the interactive loop")
+    if not os.path.isdir(data_dir):
+        print(f"Error: data directory not found: {data_dir}")
+        return
 
+    try:
+        vector_store = build_knowledge_base(data_dir)
+        llm = get_llm()
+    except Exception as exc:
+        print(f"Error initializing chatbot: {exc}")
+        return
+
+   
+    if args.query is not None:
+        question = args.query.strip()
+
+        if not question:
+            print("Please provide a non-empty question.")
+            return
+
+        result = ask_question(vector_store, llm, question)
+
+        print("\n📄 Sources:")
+        for i, source in enumerate(result["sources"], start=1):
+            print(f"  {i}. {source}")
+
+        print(f"\n💬 Answer: {result['answer']}")
+        return
+
+    
+    print("Marketing Agency Q&A Chatbot")
+    print("Type 'quit' to exit.\n")
+
+    while True:
+        question = input("> ").strip()
+
+        if question.lower() == "quit":
+            break
+
+        if not question:
+            print("Please enter a question.")
+            continue
+
+        try:
+            result = ask_question(vector_store, llm, question)
+
+            print("\n📄 Sources:")
+            for i, source in enumerate(result["sources"], start=1):
+                print(f"  {i}. {source}")
+
+            print(f"\n💬 Answer: {result['answer']}\n")
+
+        except Exception as exc:
+            print(f"Error answering question: {exc}")
 
 if __name__ == "__main__":
     main()
